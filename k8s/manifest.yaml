@@ -1,0 +1,104 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: fresh-server
+  name: fresh-server
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: fresh-server
+  name: fresh-server
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app: fresh-server
+  template:
+    metadata:
+      labels:
+        app: fresh-server
+    spec:
+      containers:
+      - name: fresh-server
+        image: fresh-server:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - name: state-vol
+          mountPath: "/app/data"
+        env:
+        - name: SERVE_PORT
+          value: "8080"
+        - name: SERVE_HOST
+          value: ""
+        - name: SERVE_DATA
+          value: "/app/data/state.db"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "64Mi"
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+            scheme: HTTP
+          failureThreshold: 2
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+            scheme: HTTP
+          failureThreshold: 2
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          successThreshold: 1
+          timeoutSeconds: 3
+        securityContext:
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+      volumes:
+      - name: state-vol
+        persistentVolumeClaim:
+          claimName: fresh-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: fresh-server
+  name: fresh-server
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: http
+  selector:
+    app: fresh-server
+  type: ClusterIP
